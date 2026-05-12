@@ -1,0 +1,31 @@
+{
+  "name": "linkflow",
+  "version": "1.0.0",
+  "description": "LinkFlow | Keyword Link Manager",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win portable"
+  },
+  "author": "Adisak Chantawila",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.adisak.linkflow",
+    "productName": "LinkFlow",
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "${productName}_Portable_${version}.${ext}"
+    }
+  }
+}
