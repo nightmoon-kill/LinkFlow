@@ -13,6 +13,11 @@
     <div class="app-container">
         <main class="dashboard">
             <header class="header">
+                <div class="header-top">
+                    <button id="themeToggle" class="icon-btn theme-toggle" title="Toggle Theme">
+                        <i data-lucide="sun" style="width: 20px;"></i>
+                    </button>
+                </div>
                 <div class="logo">
                     <div class="logo-icon">
                         <i data-lucide="link-2" style="color: white; width: 24px;"></i>
@@ -29,7 +34,7 @@
                         <input type="text" id="keywordInput" placeholder="Keyword" required>
                     </div>
                     <div class="input-group">
-                        <input type="url" id="urlInput" placeholder="URL (https://...)" required>
+                        <input type="text" id="urlInput" placeholder="URL or Destination" required>
                     </div>
                     <div class="input-group">
                         <input type="text" id="titleInput" placeholder="Advisory Title (Tooltip)">
@@ -43,14 +48,32 @@
 
             <section class="list-container">
                 <div class="list-header">
-                    <h2 class="section-title">My Save Keyword</h2>
-                    <span id="keywordCount" style="color: var(--text-secondary); font-size: 0.8rem;">0 items</span>
+                    <div class="list-title-group">
+                        <h2 class="section-title">My Save Keyword</h2>
+                        <span id="keywordCount" style="color: var(--text-secondary); font-size: 0.8rem;">0 items</span>
+                    </div>
+                    <div class="data-actions">
+                        <button id="exportBtn" class="btn btn-secondary btn-sm" title="Export to CSV">
+                            <i data-lucide="download" style="width: 14px;"></i> Export
+                        </button>
+                        <button id="importBtn" class="btn btn-secondary btn-sm" title="Import from CSV">
+                            <i data-lucide="upload" style="width: 14px;"></i> Import
+                        </button>
+                        <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+                    </div>
                 </div>
                 
                 <div class="search-container">
                     <div class="search-box">
                         <i data-lucide="search" style="width: 18px; color: var(--text-secondary);"></i>
                         <input type="text" id="searchInput" placeholder="Search keywords...">
+                    </div>
+                    <div class="sort-container">
+                        <i data-lucide="list-filter" style="width: 16px; color: var(--text-secondary);"></i>
+                        <select id="sortSelect" class="sort-select">
+                            <option value="newest">Newest First</option>
+                            <option value="alpha">A-Z (ก-ฮ)</option>
+                        </select>
                     </div>
                 </div>
 

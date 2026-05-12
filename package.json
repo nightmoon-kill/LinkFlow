@@ -1,31 +1,48 @@
 {
   "name": "linkflow",
   "version": "1.0.0",
-  "description": "LinkFlow | Keyword Link Manager",
+  "description": "Keyword Link Manager",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win portable"
-  },
-  "author": "Adisak Chantawila",
-  "license": "ISC",
-  "devDependencies": {
-    "electron": "^29.0.0",
-    "electron-builder": "^26.8.1"
+    "build:mac-intel": "electron-builder --mac --x64",
+    "build:mac-arm": "electron-builder --mac --arm64",
+    "build:mac-universal": "electron-builder --mac --universal",
+    "build:win-dir": "electron-builder --win --x64 --dir",
+    "build:win-setup": "electron-builder --win --x64"
   },
   "build": {
-    "appId": "com.adisak.linkflow",
+    "appId": "com.yourname.linkflow",
     "productName": "LinkFlow",
+    "directories": {
+      "output": "dist"
+    },
     "mac": {
-      "target": "dmg",
-      "category": "public.app-category.utilities"
+      "target": ["dmg"],
+      "category": "public.app-category.productivity"
+    },
+    "dmg": {
+      "title": "Install LinkFlow",
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     },
     "win": {
-      "target": "portable"
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "dir", "arch": ["x64"] }
+      ]
     },
-    "portable": {
-      "artifactName": "${productName}_Portable_${version}.${ext}"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}_Setup_${version}_x64.${ext}"
     }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
   }
 }
