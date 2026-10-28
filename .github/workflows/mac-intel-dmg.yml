@@ -1,0 +1,41 @@
+name: Build Mac Intel DMG
+
+on:
+  push:
+    branches: [build/mac-intel-dmg]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Build Intel DMG
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build:mac-intel -- --publish never -c.artifactName=LinkFlow-1.0.2-mac-intel.dmg -c.extraMetadata.version=1.0.2
+      - name: Verify architecture and disk image
+        run: |
+          file dist/mac/LinkFlow.app/Contents/MacOS/LinkFlow
+          lipo -verify_arch x86_64 dist/mac/LinkFlow.app/Contents/MacOS/LinkFlow
+          hdiutil verify dist/LinkFlow-1.0.2-mac-intel.dmg
+          shasum -a 256 dist/LinkFlow-1.0.2-mac-intel.dmg > dist/LinkFlow-1.0.2-mac-intel.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinkFlow-1.0.2-mac-intel
+          path: |
+            dist/LinkFlow-1.0.2-mac-intel.dmg
+            dist/LinkFlow-1.0.2-mac-intel.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
