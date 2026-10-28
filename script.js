@@ -5,6 +5,7 @@ let currentSort = localStorage.getItem('linkflow_sort') || 'newest';
 
 const THAI_ALPHABET = 'กขคฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ'.split('');
 const ENG_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const DIGITS = '0123456789'.split('');
 
 // DOM Elements
 const keywordForm = document.getElementById('keywordForm');
@@ -138,7 +139,7 @@ function renderAlphabet() {
         <button class="letter-btn all ${selectedLetter === 'All' ? 'active' : ''}" data-letter="All">All</button>
     `;
     
-    [...ENG_ALPHABET, ...THAI_ALPHABET].forEach(letter => {
+    [...DIGITS, ...ENG_ALPHABET, ...THAI_ALPHABET].forEach(letter => {
         const btn = document.createElement('button');
         btn.className = `letter-btn ${selectedLetter === letter ? 'active' : ''}`;
         btn.dataset.letter = letter;
@@ -307,68 +308,90 @@ function importFromCSV(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const text = e.target.result;
-            const lines = text.split(/\r?\n/);
-            if (lines.length < 2) return;
+            const rows = parseCSV(e.target.result.replace(/^\uFEFF/, ''));
+            const header = rows.shift();
+            if (!header || header[0].trim().toLowerCase() !== 'keyword' ||
+                !header[1] || header[1].trim().toLowerCase() !== 'url') {
+                throw new Error('CSV must start with Keyword,URL headers.');
+            }
 
             const newKeywords = [];
-            // Skip header
-            for (let i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-                
-                // Simple CSV parser handling quotes
-                const row = parseCSVRow(lines[i]);
-                if (row.length >= 2) {
-                    newKeywords.push({
-                        keyword: row[0],
-                        url: row[1],
-                        title: row[2] || '',
-                        favorite: row[3] === '1',
-                        createdAt: parseInt(row[4]) || Date.now()
-                    });
+            for (const row of rows) {
+                if (row.length < 2 || row.length > 5 || !row[0].trim() || !row[1].trim()) {
+                    throw new Error('Every CSV row must have a keyword and URL.');
                 }
+                newKeywords.push({
+                    keyword: row[0],
+                    url: row[1],
+                    title: row[2] || '',
+                    favorite: row[3] === '1',
+                    createdAt: Number(row[4]) || Date.now()
+                });
             }
 
-            if (newKeywords.length > 0) {
-                // Merge logic: avoid exact duplicates (keyword + url)
-                newKeywords.forEach(newItem => {
-                    const exists = keywords.some(k => k.keyword === newItem.keyword && k.url === newItem.url);
-                    if (!exists) keywords.push(newItem);
-                });
-                
-                saveKeywords();
-                renderKeywords();
-                alert(`Successfully imported ${newKeywords.length} keywords.`);
+            if (newKeywords.length === 0) {
+                throw new Error('CSV contains no keywords.');
             }
+
+            // Persist the complete replacement before changing the current UI state.
+            localStorage.setItem('linkflow_keywords', JSON.stringify(newKeywords));
+            keywords = newKeywords;
+            cancelEdit();
+            closeModal();
+            searchInput.value = '';
+            selectedLetter = 'All';
+            renderAlphabet();
+            renderKeywords();
+            alert(`Successfully replaced all keywords with ${newKeywords.length} imported keywords.`);
         } catch (err) {
             console.error('Import failed:', err);
             alert('Failed to import CSV. Please check the file format.');
         }
     };
+    reader.onerror = () => alert('Failed to read CSV. Existing keywords were kept.');
     reader.readAsText(file);
 }
 
-function parseCSVRow(text) {
+// Parse complete records so quoted commas, quotes, and line breaks survive export/import.
+function parseCSV(text) {
     const result = [];
+    let row = [];
     let current = '';
     let inQuotes = false;
+    let closedQuote = false;
     for (let i = 0; i < text.length; i++) {
         const char = text[i];
         if (char === '"') {
             if (inQuotes && text[i + 1] === '"') {
                 current += '"';
                 i++;
+            } else if (inQuotes) {
+                inQuotes = false;
+                closedQuote = true;
+            } else if (current === '' && !closedQuote) {
+                inQuotes = true;
             } else {
-                inQuotes = !inQuotes;
+                throw new Error('Unexpected quote in CSV.');
             }
         } else if (char === ',' && !inQuotes) {
-            result.push(current);
+            row.push(current);
             current = '';
+            closedQuote = false;
+        } else if ((char === '\n' || char === '\r') && !inQuotes) {
+            row.push(current);
+            if (row.some(value => value.trim())) result.push(row);
+            row = [];
+            current = '';
+            closedQuote = false;
+            if (char === '\r' && text[i + 1] === '\n') i++;
         } else {
+            if (closedQuote) throw new Error('Unexpected text after CSV quote.');
             current += char;
         }
     }
-    result.push(current);
+    if (inQuotes) throw new Error('Unclosed quote in CSV.');
+    row.push(current);
+    if (row.some(value => value.trim())) result.push(row);
     return result;
 }
 
@@ -411,6 +434,8 @@ function setupEventListeners() {
 
     // Handle Search
     searchInput.addEventListener('input', (e) => {
+        selectedLetter = 'All';
+        renderAlphabet();
         renderKeywords(e.target.value);
     });
 
