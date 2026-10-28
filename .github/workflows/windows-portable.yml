@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: npm test
       - name: Build portable EXE
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --win portable --x64 --publish never -c.artifactName=LinkFlow-1.0.2-Windows-Portable-x64.exe -c.extraMetadata.version=1.0.2
