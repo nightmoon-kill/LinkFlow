@@ -1,0 +1,42 @@
+name: Build Mac Universal DMG
+
+on:
+  push:
+    branches: [build/mac-universal-dmg]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Build Universal DMG
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build:mac-universal -- --publish never -c.artifactName=LinkFlow-1.0.2-mac-universal.dmg -c.extraMetadata.version=1.0.2
+      - name: Verify both architectures and disk image
+        run: |
+          file dist/mac-universal/LinkFlow.app/Contents/MacOS/LinkFlow
+          lipo dist/mac-universal/LinkFlow.app/Contents/MacOS/LinkFlow -verify_arch x86_64 arm64
+          lipo "dist/mac-universal/LinkFlow.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework" -verify_arch x86_64 arm64
+          hdiutil verify dist/LinkFlow-1.0.2-mac-universal.dmg
+          shasum -a 256 dist/LinkFlow-1.0.2-mac-universal.dmg > dist/LinkFlow-1.0.2-mac-universal.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinkFlow-1.0.2-mac-universal
+          path: |
+            dist/LinkFlow-1.0.2-mac-universal.dmg
+            dist/LinkFlow-1.0.2-mac-universal.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
