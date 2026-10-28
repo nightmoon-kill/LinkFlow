@@ -1,5 +1,13 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+// Keep portable Windows data beside the executable so the folder can move together.
+if (process.platform === 'win32' && process.env.PORTABLE_EXECUTABLE_DIR) {
+  const dataPath = path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'LinkFlow-data');
+  fs.mkdirSync(dataPath, { recursive: true });
+  app.setPath('userData', dataPath);
+}
 
 function createWindow () {
   // สร้างหน้าต่างแอปพลิเคชัน
