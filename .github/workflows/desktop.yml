@@ -1,0 +1,93 @@
+name: Build LinkFlow 1.0.3 Desktop
+
+on:
+  push:
+    branches: [build/v1.0.3-desktop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        shell: bash
+        run: npm test
+      - name: Build portable EXE
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win portable --x64 --publish never -c.artifactName=LinkFlow-1.0.3-Windows-Portable-x64.exe -c.extraMetadata.version=1.0.3
+      - name: Verify x64 and launch portable application
+        shell: pwsh
+        run: |
+          $exe = Join-Path $pwd 'dist/LinkFlow-1.0.3-Windows-Portable-x64.exe'
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          if ($bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Invalid EXE header' }
+          $appBytes = [System.IO.File]::ReadAllBytes((Join-Path $pwd 'dist/win-unpacked/LinkFlow.exe'))
+          $peOffset = [BitConverter]::ToInt32($appBytes, 0x3c)
+          if ([BitConverter]::ToUInt16($appBytes, $peOffset + 4) -ne 0x8664) { throw 'App is not x64' }
+          try {
+            Start-Process -FilePath $exe
+            $window = $null
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 2
+              $window = Get-Process | Where-Object { $_.MainWindowTitle -like '*LinkFlow*' } | Select-Object -First 1
+              if ($window) { break }
+            }
+            if (-not $window) { throw 'Portable application did not open a window' }
+            if (-not (Test-Path 'dist/LinkFlow-data')) { throw 'Portable data directory was not created' }
+            Write-Output "Portable window opened: $($window.MainWindowTitle)"
+          } finally {
+            Get-Process | Where-Object { $_.ProcessName -like 'LinkFlow*' } | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  LinkFlow-1.0.3-Windows-Portable-x64.exe" | Set-Content 'dist/LinkFlow-1.0.3-Windows-Portable-x64.exe.sha256'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinkFlow-1.0.3-Windows-Portable-x64
+          path: |
+            dist/LinkFlow-1.0.3-Windows-Portable-x64.exe
+            dist/LinkFlow-1.0.3-Windows-Portable-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+  macos:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        run: npm test
+      - name: Build Universal DMG
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build:mac-universal -- --publish never -c.artifactName=LinkFlow-1.0.3-mac-universal.dmg -c.extraMetadata.version=1.0.3
+      - name: Verify both architectures and disk image
+        run: |
+          file dist/mac-universal/LinkFlow.app/Contents/MacOS/LinkFlow
+          lipo dist/mac-universal/LinkFlow.app/Contents/MacOS/LinkFlow -verify_arch x86_64 arm64
+          lipo "dist/mac-universal/LinkFlow.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework" -verify_arch x86_64 arm64
+          hdiutil verify dist/LinkFlow-1.0.3-mac-universal.dmg
+          shasum -a 256 dist/LinkFlow-1.0.3-mac-universal.dmg > dist/LinkFlow-1.0.3-mac-universal.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinkFlow-1.0.3-mac-universal
+          path: |
+            dist/LinkFlow-1.0.3-mac-universal.dmg
+            dist/LinkFlow-1.0.3-mac-universal.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
