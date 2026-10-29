@@ -106,6 +106,7 @@ jobs:
             if (arch !== process.env.EXPECTED_ARCH) throw Error('Wrong native architecture: ' + arch);
             const result = await page.evaluate(() => {
               const fields = ['keywordInput','urlInput','titleInput','searchInput'];
+              fields.forEach(id => { document.getElementById(id).style.transition = 'none'; });
               const read = () => fields.map(id => getComputedStyle(document.getElementById(id)).color);
               document.body.classList.remove('light-mode');
               const dark = read();
