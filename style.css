@@ -43,6 +43,7 @@ body.light-mode {
 }
 
 body.light-mode input {
+    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.03);
 }
 
