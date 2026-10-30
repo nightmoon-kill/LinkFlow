@@ -1,0 +1,111 @@
+name: Build and test Windows Installer 1.0.4
+on:
+  push:
+    branches: [build/v1.0.4-windows-installer]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install build dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run regression tests
+        shell: bash
+        run: npm test
+      - name: Build Windows x64 NSIS installer
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version=1.0.4 -c.nsis.artifactName=LinkFlow-1.0.4-Windows-Setup-x64.exe -c.nsis.runAfterFinish=false
+      - name: Install and verify x64 application
+        shell: pwsh
+        run: |
+          $setup = Join-Path $pwd 'dist/LinkFlow-1.0.4-Windows-Setup-x64.exe'
+          $installDir = Join-Path $env:RUNNER_TEMP 'LinkFlow-Install-Test'
+          $result = Start-Process -FilePath $setup -ArgumentList "/S /currentuser /D=$installDir" -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Installer exit code: $($result.ExitCode)" }
+          $app = Join-Path $installDir 'LinkFlow.exe'
+          if (-not (Test-Path $app)) { throw 'Installed application not found' }
+          $bytes = [IO.File]::ReadAllBytes($app)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $peOffset + 4) -ne 0x8664) { throw 'Installed app is not x64' }
+          $uninstaller = Join-Path $installDir 'Uninstall LinkFlow.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Uninstaller not found' }
+          "LINKFLOW_INSTALL_DIR=$installDir" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output 'NSIS installation completed and x64 application verified.'
+      - name: Install UI test dependency
+        run: npm install --no-save --ignore-scripts playwright-core
+      - name: Launch installed app
+        shell: pwsh
+        run: |
+          $app = Join-Path $env:LINKFLOW_INSTALL_DIR 'LinkFlow.exe'
+          Start-Process -FilePath $app -ArgumentList '--remote-debugging-port=9222'
+          $ready = $false
+          for ($attempt = 0; $attempt -lt 45; $attempt++) {
+            Start-Sleep -Seconds 1
+            try {
+              $null = Invoke-RestMethod 'http://127.0.0.1:9222/json/version'
+              $ready = $true
+              break
+            } catch {}
+          }
+          if (-not $ready) { throw 'Installed application did not start' }
+      - name: Verify installed application version and themes
+        shell: bash
+        run: |
+          node <<'JS'
+          const { chromium } = require('playwright-core');
+          (async () => {
+            const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+            const page = browser.contexts()[0].pages()[0];
+            await page.waitForSelector('#searchInput');
+            const result = await page.evaluate(() => {
+              const version = require('fs').readFileSync(require('path').join(process.resourcesPath,'app.asar','package.json'),'utf8');
+              const fields = ['keywordInput','urlInput','titleInput','searchInput'];
+              fields.forEach(id => { document.getElementById(id).style.transition = 'none'; });
+              const read = () => fields.map(id => getComputedStyle(document.getElementById(id)).color);
+              document.body.classList.remove('light-mode');
+              const dark = read();
+              document.body.classList.add('light-mode');
+              const light = read();
+              return { version: JSON.parse(version).version, arch: process.arch, dark, light };
+            });
+            if (result.version !== '1.0.4' || result.arch !== 'x64') throw Error('Wrong application: '+JSON.stringify(result));
+            if (!result.dark.every(c => c === 'rgb(255, 255, 255)')) throw Error('Dark theme failed');
+            if (!result.light.every(c => c === 'rgb(30, 41, 59)')) throw Error('Light theme failed');
+            console.log('Installed LinkFlow '+result.version+' launched on Windows x64; both themes passed.');
+            await browser.close();
+          })().catch(e => { console.error(e); process.exit(1); });
+          JS
+      - name: Test uninstallation
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -eq 'LinkFlow' } | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          $uninstaller = Join-Path $env:LINKFLOW_INSTALL_DIR 'Uninstall LinkFlow.exe'
+          $result = Start-Process -FilePath $uninstaller -ArgumentList '/S /currentuser' -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Uninstaller exit code: $($result.ExitCode)" }
+          for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            if (-not (Test-Path (Join-Path $env:LINKFLOW_INSTALL_DIR 'LinkFlow.exe'))) { break }
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path (Join-Path $env:LINKFLOW_INSTALL_DIR 'LinkFlow.exe')) { throw 'Application still present after uninstall' }
+          Write-Output 'Uninstallation passed.'
+          $setup = Join-Path $pwd 'dist/LinkFlow-1.0.4-Windows-Setup-x64.exe'
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          "$hash  LinkFlow-1.0.4-Windows-Setup-x64.exe" | Set-Content 'dist/LinkFlow-1.0.4-Windows-Setup-x64.exe.sha256'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinkFlow-1.0.4-Windows-Setup-x64
+          path: |
+            dist/LinkFlow-1.0.4-Windows-Setup-x64.exe
+            dist/LinkFlow-1.0.4-Windows-Setup-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
